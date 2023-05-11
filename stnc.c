@@ -137,7 +137,6 @@ int run_server()
         while (1) 
         {    
             fgets(buffer, BUFFER_SIZE, stdin);
-
             if(thread_alive == 0) break;
 
             printf(">> Server: %s", buffer);
