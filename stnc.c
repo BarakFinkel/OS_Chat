@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <poll.h>
 
 int   client = 0;
 int   server = 0;
@@ -189,11 +190,11 @@ int run_client()
         return -1;
     }
 
-
     // Make a connection to the server with socket SendingSocket.
-
+    
     int connectResult = connect(client_sock, (struct sockaddr *)&server_add, sizeof(server_add)); 
-    if (connectResult == -1) {
+    if (connectResult == -1) 
+    {
         printf("Error: Connecting to server failed.\n");   
         close(client_sock);
         return -1;
