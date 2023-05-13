@@ -1,7 +1,7 @@
 .PHONY: clean
 
-stnc: stnc1.c
-	gcc -Wall -o stnc stnc1.c -pthread
+stnc: stnc.c
+	gcc -Wall -o stnc stnc.c
 
 clean:
 	rm -f stnc
