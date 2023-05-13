@@ -13,26 +13,26 @@
 #include <poll.h>
 #include <fcntl.h>
 
-int   client = 0;
-int   server = 0;
-int   testing = 0;
-int   client_sock;
-int   server_sock;
-int   BUFFER_SIZE = 4096;
-char* SERVER_PORT;
-char* SERVER_IP;
+int   client = 0;  // Used to determine if the program is running as a client.
+int   server = 0;  // Used to determine if the program is running as a server.
+int   cl_sock = 0; // Used to close the socket in case of a exit signal.
+int   sv_sock = 0; // Used to close the socket in case of a exit signal.
+int   testing = 0; // Used to determine if the program is running in testing mode.
+int   BUFFER_SIZE = 4096; // Used to determine the size of the buffer.
+char* SERVER_PORT; // Used to determine the port of the server, and is passed as an argument to the program.
+char* SERVER_IP;   // Used to determine the IP of the server, and is passed as an argument to the program.
 
 void HandleExit(int signal) 
 {
     printf("\nSignal received. Closing sockets and exiting...\n");
 
-    if(client_sock > 0) close(client_sock);
-    if(server_sock > 0) close(server_sock);
+    if(cl_sock > 0) close(cl_sock);
+    if(sv_sock > 0) close(sv_sock);
 
     exit(0);
 }
 
-void activate_poll(struct pollfd fds[2], char* buffer)
+void activate_poll(struct pollfd fds[2], char* buffer, int client_sock, int server_sock)
 {     
     while(1)
     {
@@ -51,8 +51,6 @@ void activate_poll(struct pollfd fds[2], char* buffer)
         // If our poller caught an input from the serve'rs user, we read it and send it to the client.
         if(fds[0].revents & POLLIN)
         {            
-            printf("User input detected.\n");
-            
             int bytes_read = read(STDIN_FILENO, buffer, BUFFER_SIZE);
             if(bytes_read < 0)
             {
@@ -64,8 +62,6 @@ void activate_poll(struct pollfd fds[2], char* buffer)
             }
             buffer[bytes_read] = '\0';
 
-            printf("Message: %s", buffer);
-
             int bytes_sent = send(client_sock, buffer, bytes_read, 0);
             if(bytes_sent < 0)
             {
@@ -75,8 +71,6 @@ void activate_poll(struct pollfd fds[2], char* buffer)
                 if(server_sock > 0) close(server_sock);
                 exit(1);
             }
-
-            printf("Sent %d bytes to client.\n", bytes_sent);
 
             if(!strcmp(buffer, "exit\n"))
             {
@@ -90,8 +84,6 @@ void activate_poll(struct pollfd fds[2], char* buffer)
         // If the client has sent something, we read it and print it to the user.
         if(fds[1].revents & POLLIN)
         {
-            printf("Socket action detected.\n");
-
             int bytes_received = recv(client_sock, buffer, BUFFER_SIZE - 1, 0);
             if(bytes_received < 0)
             {
@@ -124,12 +116,15 @@ void run_server()
     int temp;
     
     // Creating the socket.
-    server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); 
+    int server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); 
     if (server_sock < 0)
     {
         printf("Error : Listen socket creation failed.\n");
         exit(1);
     }
+
+    // We pass the socket's fd in order to close it in case of a exit signal.
+    sv_sock = server_sock;
 
     // Using a previously chosen socketopt if there is one.
     int reuse = 1;                                                                   
@@ -170,12 +165,7 @@ void run_server()
     socklen_t client_add_len = sizeof(client_add); 
     memset(&client_add, 0, sizeof(client_add));
 
-    // Creating a pollfd struct that will be used to check wether incoming data is from the client or from the server's user.
-    struct pollfd fds[2] =
-    {
-        { .fd = STDIN_FILENO, .events = POLLIN },
-        { .fd = client_sock,  .events = POLLIN }
-    };
+    int client_sock;
 
     // Creating the buffer for the communication.
     char buffer[BUFFER_SIZE];
@@ -194,10 +184,20 @@ void run_server()
             exit(1);
         }
 
+        // Creating a pollfd struct that will be used to check wether incoming data is from the client or from the server's user.
+        struct pollfd fds[2] =
+        {
+            { .fd = STDIN_FILENO, .events = POLLIN },
+            { .fd = client_sock,  .events = POLLIN }
+        };
+
+        // We pass the socket's fd in order to close it in case of a exit signal.
+        cl_sock = client_sock;
+
         printf("Connected to client!\n");
 
         // If we reach here, we have a connection.
-        activate_poll(fds, buffer);
+        activate_poll(fds, buffer, client_sock, server_sock);
     }
 
     // If we reach here, then we close the server socket and exit the program.
@@ -208,12 +208,15 @@ void run_client()
 {
     int temp;
     
-    client_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);   // Creating a socket using the IPv4 module.
+    int client_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);   // Creating a socket using the IPv4 module.
     if (client_sock == -1) 
     {
         printf("Error : Listen socket creation failed.\n"); // If the socket creation failed, print the error and exit main.   
         exit(1);
     }
+
+    // We pass the socket's fd in order to close it in case of a exit signal.
+    cl_sock = client_sock;
 
     struct sockaddr_in server_add;                       // Using the imported struct of a socket address using the IPv4 module.
     memset(&server_add, 0, sizeof(server_add));          // Resetting it to default values.
@@ -248,7 +251,7 @@ void run_client()
     char buffer[BUFFER_SIZE];
     memset(&buffer, 0, sizeof(buffer));
 
-    activate_poll(fds, buffer);
+    activate_poll(fds, buffer, client_sock, 0);
 }
 
 int main(int argc, char *argv[])
